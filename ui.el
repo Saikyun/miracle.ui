@@ -5,11 +5,16 @@
 
 (defvar widget-example-repeat)
 
-(defvar wwwa nil)
-
-(defun notify (widget b)
-  (message "huh")
-  (setq wwwa widget))
+(defun notify (widget &rest r)
+  (let* ((v (widget-value widget))
+         (msg (format "%s"
+                      `[:assoc ,(format "\"%s\"" (widget-get widget :id))
+                               :value ,(format "\"%s\"" v)])))
+    (when (not (equal (widget-get widget :old-value) v))
+      (widget-put widget :old-value v)
+      
+      (client-send-string msg)
+      (setq last-msg msg))))
 
 (defun widget-example ()
   "Create the widgets from the Widget manual."
@@ -28,7 +33,7 @@
   (widget-create 'editable-field
                  :size 13
                  :format "Name: %v " ; Text after the field!
-                 :notify 'notify
+                 :notify 'notify2
                  "My Name")
   (use-local-map widget-keymap)
   (widget-setup))
@@ -71,16 +76,14 @@
            (progn
              (let ((new-hc (funcall f hc)))
                (case (length new-hc)
-                 (0 (progn (message "nope") 'nil))
-                 (1 (progn (message "nope1") 'nil))
-                 (2 (progn (message "middle")
-                           (if (hash-table-p (aref new-hc 1))
-                               'nil
-                             (traverse-many-hiccup f (seq-drop new-hc 1)))))
-                 (t (progn (message "moar")
-                           (traverse-many-hiccup f (seq-drop new-hc (if (hash-table-p (aref new-hc 1))
-                                                                        2
-                                                                      1)))))))))))))
+                 (0 'nil)
+                 (1 'nil)
+                 (2 (if (hash-table-p (aref new-hc 1))
+                        'nil
+                      (traverse-many-hiccup f (seq-drop new-hc 1))))
+                 (t (traverse-many-hiccup f (seq-drop new-hc (if (hash-table-p (aref new-hc 1))
+                                                                 2
+                                                               1))))))))))))
 
 (defun traverse-many-hiccup
     (f hcs)
@@ -123,12 +126,15 @@
       (:hr (widget-insert "\n-----------\n"))
       (:input
        ;;(widget-insert "input")
-       (progn (widget-create 'editable-field
-                             :size (or (and opts (gethash :width opts)) 15)
-                             :format "%v"       ; Text after the field!
-                             "")
-              'nil)
-       )
+       (let ((value (or (and (props hc) (gethash :value (props hc))) "")))
+         (widget-create 'editable-field
+                        :size (or (and opts (gethash :width opts)) 15)
+                        :format "%v" ; Text after the field!
+                        :notify 'notify
+                        :old-value value
+                        :id (and (props hc) (gethash :id (props hc)))
+                        value)
+         'nil))
       (:div (let ((p (props hc)))
               (if (and p (eql :grid (gethash :display p)))
                   (widget-insert-grid hc)
@@ -150,7 +156,7 @@
   "Widget-Insert a grid based on `HC`."
   (let* ((cs (children hc))
          (nof (length cs))
-         (column-width (/ (window-width) nof)))
+         (column-width (- (/ (window-width) nof) 1)))
     
     (delimiter nof column-width)
     
@@ -170,23 +176,32 @@
     ;;(widget-insert "\n")
     ))
 
-(switch-to-buffer-other-window "*Widget Example*")
-(kill-all-local-variables)
-(make-local-variable 'widget-example-repeat)
-(let ((inhibit-read-only t))
-  (erase-buffer))
-(remove-overlays)
+(defvar curr-point 'nil)
 
-(traverse-hiccup 'render
-                 (edn-read hiccup))
-
-;; (widget-insert "Here is some documentation.\n\n")
-;; (widget-create 'editable-field
-;;                :size 13
-;;                :format "Name: %v " ; Text after the field!
-;;                :notify 'notify
-;;                "My Name")
-;;(use-local-map widget-keymap)
-
-(widget-setup)
-
+(defun render-widget-view
+    (hiccup)
+  (switch-to-buffer "*Widget Example*")
+  
+  (setq curr-point (point))
+  
+  (kill-all-local-variables)
+  (make-local-variable 'widget-example-repeat)
+  (let ((inhibit-read-only t))
+    (erase-buffer))
+  (remove-overlays)
+  
+  (linum-mode 0)
+  
+  (traverse-hiccup 'render hiccup)
+  
+  ;; (widget-insert "Here is some documentation.\n\n")
+  ;; (widget-create 'editable-field
+  ;;                :size 13
+  ;;                :format "Name: %v " ; Text after the field!
+  ;;                :notify 'notify
+  ;;                "My Name")
+  ;;(use-local-map widget-keymap)
+  
+  (widget-setup)
+  
+  (goto-char curr-point))

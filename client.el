@@ -9,8 +9,12 @@
 (defun client-notify-connect (&rest args)
   (message (format "Connection message [%s]" (mapcar #'chomp args))))
 
-(defun just-print-it (sock &rest args)
-  (apply 'message args))
+(defun just-print-it (sock v)
+  (render-widget-view (edn-read v)))
+
+;;(edn-read (message (first (last (delete "" (split-string huuuh "#end"))))))
+
+
 
 (defun client-open (host port)
   (make-network-process :name client-process-name
@@ -28,11 +32,12 @@
   (process-send-string (client-process) (concat str "\r\n")))
 
 (client-open "localhost" 4433)
-(client-send-string "(+ 1 1)")
+;;(client-send-string "(+ 1 1)")
 
 (defun que ()
   (interactive)
-  (client-send-string "a"))
+    (client-send-string "a")
+    )
 
 (global-set-key (kbd "C-ö") 'que)
 

@@ -69,7 +69,7 @@
                                 (format (str "%-" (if (= k (last ks))
                                                     (+ column-width remainder)
                                                     column-width)
-                                             "s") (or (get filters k) "<no filter>"))))
+                                             "s") (or (get filters k) ""))))
               line]
              (for [save (filter
                          (fn [bindings]
@@ -123,8 +123,7 @@
                     (rem (- width
                             (* divider (dec (count ks)))
                             (+ before after))
-                         (count ks)))
-        line [:hr]]
+                         (count ks)))]
     {:filter-line 4
      :save-name k
      :width width
@@ -136,21 +135,22 @@
                  vec)
      :lines (vec
              (concat
-              [k
-               line 
-               (vec (for [k ks]
-                      [:div k]))
-               line
-               (vec (for [k ks]
-                      [:div (or (get filters k) "<no filter>")]))
-               line]
+              [:div [:p k]
+               (into [:div {:display :grid}]
+                     (for [k ks]
+                       [:div k]))
+               (into [:div {:display :grid}]
+                     (for [k ks]
+                       [:input {:id (str "filter-" k)
+                                :value (or (get filters (str "filter-" k)) "")}]))]
               (vec
                (for [save (filter
                            (fn [bindings]
                              (if (seq filters)
                                (apply = true
                                       (for [[k pred] filters
-                                            :let [str-filter #(str/includes? (str %) pred)]]
+                                            :let [str-filter #(str/includes? (str %) pred)
+                                                  k (symbol (last (str/split k #"-")))]]
                                         (if (cond (str/starts-with? pred "#'")
                                                   (try ((eval (read-string pred)) (get bindings k))
                                                        (catch Exception _
@@ -167,12 +167,10 @@
                                           nil)))
                                bindings))
                            saves)]
-                 (vec (for [k ks
-                            :let [v (get save k)]]
-                        [:div (apply str (take column-width (str v)))]))))
-              
-              [line]))}
-    ))
+                 (into [:div {:display :grid}]
+                       (for [k ks
+                             :let [v (get save k)]]
+                         [:div (apply str (take column-width (str v)))]))))))}))
 
 #_(let [{:keys [lines]} (ascii :map-all 80 {})]
     (println (str/join "\n" lines)))
@@ -203,15 +201,25 @@
 
   (println (map meta (ascii :map-all 80 {:filters {'l "#'vector?"}}))))
 
+(def filters (atom {}))
+
 (defn handle-input
   [e println]
-  (if (= e "a")
-    (do (save :print)
-        (binding [*out* *out*]
-          (s/print-saves :inc-all))
-        (println "got command" e))
+  (cond
+    (= e 'a) (do (save :print)
+                 (binding [*out* *out*]
+                   (prn (:lines (hiccup :map-all 80 {:filters @filters}))))
+                 (println "got command" e))
+    
+    (vector? e) (let [{:keys [value] :as command} (apply hash-map e)
+                      new-filters (swap! filters assoc (:assoc command) value)]
+                  (prn (:lines (hiccup :map-all 80 {:filters new-filters})))
+                  (println "wat-command")
+                  (println (:lines (hiccup :map-all 80 {:filters new-filters}))))
+    
+    :else
     (do (save :unreq)
-        (prn "unreq" e)
+        #_(prn "unreq" e)
         (println "unreeee" e)))
   (flush))
 

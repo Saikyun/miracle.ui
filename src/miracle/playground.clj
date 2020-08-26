@@ -13,12 +13,9 @@
   (map f l))
 
 (comment
-  (ui/start-ui-server!)
-  
-  (inc-all [1 2 3])
-  
-  (map-all inc [1 2 3])
-  (map-all inc [4 2 19 1209 32190312 12390])
-  
-  (s/print-saves :inc-all)
+  ;; test data
+  (doseq [i (range 10)
+          :let [f (rand-nth [inc dec])
+                v (vec (repeat (rand-int 10) (rand-int 30000)))]]
+    (map-all f v))
   )
