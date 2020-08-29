@@ -16,6 +16,6 @@
   ;; test data
   (doseq [i (range 10)
           :let [f (rand-nth [inc dec])
-                v (vec (repeat (rand-int 10) (rand-int 30000)))]]
+                v (vec (repeat 100 (rand-int 30000)))]]
     (map-all f v))
   )

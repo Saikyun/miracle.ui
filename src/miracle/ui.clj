@@ -105,6 +105,13 @@
              [line])}
     ))
 
+(defn inspect-map
+  [map-to-print & {:keys [desired-level safe-count right-margin]
+                   :or {desired-level 4 safe-count 10 right-margin 40}}]
+  (binding [*print-level* desired-level *print-length* safe-count
+            clojure.pprint/*print-right-margin* right-margin]
+    (clojure.pprint/pprint map-to-print)))
+
 (defn hiccup
   [k width {:keys [filters]}]
   (let [saves (get @miracle.clj.save/saves k)
@@ -170,7 +177,7 @@
                  (into [:div {:display :grid}]
                        (for [k ks
                              :let [v (get save k)]]
-                         [:div (apply str (take column-width (str v)))]))))))}))
+                         [:div (with-out-str (inspect-map v))]))))))}))
 
 #_(let [{:keys [lines]} (ascii :map-all 80 {})]
     (println (str/join "\n" lines)))
@@ -198,7 +205,7 @@
 
 (comment
   (println (str/join "\n" (ascii :map-all 80 {:filters {'l "#'vector?"}})))
-
+  
   (println (map meta (ascii :map-all 80 {:filters {'l "#'vector?"}}))))
 
 (def filters (atom {}))

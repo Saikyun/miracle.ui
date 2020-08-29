@@ -10,6 +10,7 @@
   (message (format "Connection message [%s]" (mapcar #'chomp args))))
 
 (defun just-print-it (sock v)
+  (message "got message")
   (render-widget-view (edn-read v)))
 
 ;;(edn-read (message (first (last (delete "" (split-string huuuh "#end"))))))
@@ -30,6 +31,10 @@
 
 (defun client-send-string (str)
   (process-send-string (client-process) (concat str "\r\n")))
+
+(condition-case e
+    (client-close)
+  (error (message "%s" e)))
 
 (client-open "localhost" 4433)
 ;;(client-send-string "(+ 1 1)")

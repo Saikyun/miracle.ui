@@ -121,7 +121,9 @@
 (defun render
     (hc &optional opts)
   (if (or (not (seqp hc)) (stringp hc))
-      (widget-insert (format "%s" hc))
+      (let* ((s (format "%s" hc))
+	     (s (replace-regexp-in-string "\n " "\n  " s)))
+	(widget-insert s))
     (case (aref hc 0)
       (:hr (widget-insert "\n-----------\n"))
       (:input
