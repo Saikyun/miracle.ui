@@ -5,6 +5,8 @@
 
 (defvar widget-example-repeat)
 
+(defvar miracle-filters (make-hash-table :test 'equal))
+
 (defun notify (widget &rest r)
   (let* ((v (widget-value widget))
          (msg (format "%s"
@@ -14,6 +16,9 @@
       (widget-put widget :old-value v)
       
       (client-send-string msg)
+      
+      (puthash (widget-get widget :id) v miracle-filters)
+      
       (setq last-msg msg))))
 
 (defun widget-example ()
@@ -122,24 +127,34 @@
     (hc &optional opts)
   (if (or (not (seqp hc)) (stringp hc))
       (let* ((s (format "%s" hc))
-	     (s (replace-regexp-in-string "\n " "\n  " s)))
-	(widget-insert s))
+             (s (replace-regexp-in-string "\n " "\n  " s)))
+        (widget-insert s))
     (case (aref hc 0)
       (:hr (widget-insert "\n-----------\n"))
       (:input
        ;;(widget-insert "input")
-       (let ((value (or (and (props hc) (gethash :value (props hc))) "")))
+       (let* ((id (and (props hc) (gethash :id (props hc))))
+              (value (or (when id (gethash id miracle-filters))
+                         (and (props hc) (gethash :value (props hc))) "")))
          (widget-create 'editable-field
                         :size (or (and opts (gethash :width opts)) 15)
                         :format "%v" ; Text after the field!
                         :notify 'notify
                         :old-value value
-                        :id (and (props hc) (gethash :id (props hc)))
+                        :id id
                         value)
          'nil))
       (:div (let ((p (props hc)))
               (if (and p (eql :grid (gethash :display p)))
-                  (widget-insert-grid hc)
+                  (let* ((start (point))
+                         (res (widget-insert-grid hc))
+                         (end (point)))
+                    (if (gethash :selected p)
+                        (let ((overlay (make-overlay start end)))
+                          (overlay-put overlay 'face '(:background "light gray")))
+                      ;;(put-text-property start end 'font-lock-face '(:background "gray"))
+                      )
+                    res)
                 (progn (widget-insert " ") hc))))
       (:p (progn
             (mapc (lambda (c) (widget-insert (format "%s" c))) (children hc))
@@ -180,10 +195,21 @@
 
 (defvar curr-point 'nil)
 
+(defun down
+    ()
+  (interactive)
+  (client-send-string "(fn [state] (update state :pos inc))"))
+
+(defun up
+    ()
+  (interactive)
+  (client-send-string "(fn [state] (update state :pos dec))"))
+
 (defun render-widget-view
     (hiccup)
   (switch-to-buffer "*Widget Example*")
   
+  (setq first-time (eql 'nil curr-point))
   (setq curr-point (point))
   
   (kill-all-local-variables)
@@ -191,6 +217,15 @@
   (let ((inhibit-read-only t))
     (erase-buffer))
   (remove-overlays)
+  
+  (local-set-key (kbd "<down>") 'down)
+  (local-set-key (kbd "<up>") 'up)
+  
+  (define-key widget-field-keymap (kbd "<down>") 'down)
+  (define-key widget-field-keymap (kbd "<up>") 'up)
+  
+  (local-set-key (kbd "<tab>") 'widget-forward)
+  (local-set-key (kbd "S-<tab>") 'widget-backward)
   
   (linum-mode 0)
   
@@ -206,4 +241,6 @@
   
   (widget-setup)
   
-  (goto-char curr-point))
+  (if first-time
+      (widget-forward 1)
+    (goto-char curr-point)))

@@ -1,6 +1,5 @@
 (ns miracle.playground
-  (:require [miracle.ui :as ui]
-            [miracle.clj.save :as s :refer [save ld]]))
+  (:require [miracle.clj.save :as s :refer [save ld]]))
 
 (defn inc-all
   [l]
