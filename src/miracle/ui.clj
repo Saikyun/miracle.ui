@@ -2,7 +2,7 @@
   (:require [miracle.clj.save :as s :refer [save ld]]
             [clojure.string :as str]
             [miracle.playground]
-
+            
             [clojure.pprint :refer [pprint pp]])
   (:import [java.net ServerSocket Socket SocketException]
            [java.io InputStreamReader OutputStreamWriter]
@@ -40,108 +40,114 @@
   [{:keys [nof-save-lines] :as state}]
   (update state :pos (fn [pos] (max 0 pos))))
 
-(defn hiccup
-  [k width {:keys [filters pos height] :as state}]
-  (let [saves (get @miracle.clj.save/saves k)
-        ks (into #{} (mapcat keys saves))
-        before 2
-        after 2
-        divider 3
-        column-width (if (empty? ks)
-                       width
-                       (quot (- width
-                                (* divider (dec (count ks)))
-                                (+ before after))
-                             (count ks)))
-        remainder (if (empty? ks)
-                    0
-                    (rem (- width
-                            (* divider (dec (count ks)))
-                            (+ before after))
-                         (count ks)))
-        
-        pos (max pos 0)
-        
-        form-lines [:div [:p k]
-                    (into [:div {:display :grid}]
-                          (for [k ks]
-                            [:div k]))
-                    (into [:div {:display :grid}]
-                          (for [k ks]
-                            [:input {:id (str "filter-" k)
-                                     :value (or (get filters (str "filter-" k)) "")}]))]          
-        
-        filtered-bindings (filter
-                           (fn [bindings]
-                             (if (seq filters)
-                               (apply = true
-                                      (for [[k pred] filters
-                                            :let [;;str-filter #(str/includes? (str %) pred)
-                                                  k (symbol (last (str/split k #"-")))]]
-                                        (do (save :inner-filter)
-                                            (if (cond (str/starts-with? pred "#'") 
-                                                      (try ((eval (read-string pred)) (get bindings k))
-                                                           (catch Exception _
-                                                             true
-                                                             ;;(str-filter (get bindings k))
-                                                             ))
-                                                      
-                                                      (str/starts-with? pred "#")
-                                                      (try ((eval (read-string pred)) (get bindings k))
-                                                           (catch Exception _
-                                                             true
-                                                             ;; (str-filter (get bindings k))
-                                                             ))
-                                                      
-                                                      :else
-                                                      (let [pred (if (str/starts-with? pred "(")
-                                                                   pred
-                                                                   (str "(" pred ")"))]
-                                                        (try (binding [*temp-bindings* bindings]
-                                                               (eval `(let [~k (get *temp-bindings* '~k)]
-                                                                        ~(read-string pred))))
-                                                             (catch Exception e
-                                                               ;;(std-println e)
-                                                               true
-                                                               ;;(str-filter (get bindings k))
-                                                               )))
-                                                      
-                                                      ;;:else true
-                                                      ;; (str-filter (get bindings k))
-                                                      )
-                                              true
-                                              nil))))
-                               bindings))
-                           saves)
-        
-        skip (quot pos 3) 
+(defn fulfills-filters?
+  [filters bindings]
+  (if (seq filters)
+    (apply = true
+           (for [[k pred] filters
+                 :let [;;str-filter #(str/includes? (str %) pred)
+                       k (symbol (last (str/split k #"-")))]]
+             (do (save :inner-filter)
+                 (if (cond (str/starts-with? pred "#'") 
+                           (try ((eval (read-string pred)) (get bindings k))
+                                (catch Exception _
+                                  true
+                                  ;;(str-filter (get bindings k))
+                                  ))
+                           
+                           (str/starts-with? pred "#")
+                           (try ((eval (read-string pred)) (get bindings k))
+                                (catch Exception _
+                                  true
+                                  ;; (str-filter (get bindings k))
+                                  ))
+                           
+                           :else
+                           (let [pred (if (str/starts-with? pred "(")
+                                        pred
+                                        (str "(" pred ")"))]
+                             (try (binding [*temp-bindings* bindings]
+                                    (eval `(let [~k (get *temp-bindings* '~k)]
+                                             ~(read-string pred))))
+                                  (catch Exception e
+                                    ;;(std-println e)
+                                    true
+                                    ;;(str-filter (get bindings k))
+                                    )))
+                           
+                           ;;:else true
+                           ;; (str-filter (get bindings k))
+                           )
+                   true
+                   nil))))
+    bindings))
 
-        filtered-bindings2 (drop (* 3 skip) filtered-bindings) 
-        
-        [new-pos filtered-bindings3] (if (empty? filtered-bindings2)
-                                       [(max 0 (dec (count filtered-bindings)))
-                                        (if-let [e (last filtered-bindings)]
-                                          [e]
-                                          [])]
-                                       [pos (vec (take 10 filtered-bindings2))])
-        
-        save-lines (vec (for [bindings filtered-bindings3]
-                          (do (save :huuh)
-                              (into [:div {:display :grid, :pos pos, :skip skip, :selected
-                                           (identical? bindings (get filtered-bindings3 (if (= 0 skip)
-                                                                                          pos
-                                                                                          (rem pos (* skip 3)))))}]
-                                    (for [k ks
-                                          :let [v (get bindings k)]]
-                                      [:div (with-out-str (inspect-map v))])))))]
+(defn row
+  [{:keys [bindings selected columns width] :as props}]
+  (into [:div {:display  :grid
+               :selected selected}]
+        (for [k columns
+              :let [v (get bindings k)
+                    s (with-out-str (inspect-map v))
+                    s (subs s 0 (dec (count s)))]] ;; remove trailing \n
+          [:div (if (and width (< width (count s)))
+                  (subs s 0 width)
+                  s)])))
+
+(defn hiccup
+  [{:keys [filters pos height save-key width] :as state}]
+  (let [saves         (get @miracle.clj.save/saves save-key)
+        ks            (into #{} (mapcat (comp keys second) saves))
+        before        2
+        after         2
+        divider       3
+        pos           (max pos 0)
+        skip          (quot pos 3)
+        column-width
+        , (if (empty? ks)
+            width
+            (quot (- width
+                     (* divider (dec (count ks)))
+                     (+ before after))
+                  (count ks)))
+        form-lines
+        , [:div [:p save-key]
+           (into [:div {:display :grid}]
+                 (for [k ks]
+                   [:div k]))
+           (into [:div {:display :grid}]
+                 (for [k ks]
+                   [:input {:id (str "filter-" k)
+                            :value (or (get filters (str "filter-" k)) "")}]))]          
+        filtered-bindings
+        , (filter (fn [[_ bindings]] (fulfills-filters? filters bindings)) saves)
+        filtered-bindings2
+        , (drop (* 3 skip) filtered-bindings) 
+        filtered-bindings3
+        , (if (empty? filtered-bindings2)
+            (if-let [e (last filtered-bindings)] [e] [])
+            (vec (take 10 filtered-bindings2)))
+        new-pos
+        , (if (seq filtered-bindings2)
+            pos
+            (max 0 (dec (count filtered-bindings))))
+        [id selected-bindings]
+        , (get filtered-bindings3 (if (= 0 skip)
+                                    new-pos
+                                    (rem new-pos (* skip 3))))
+        save-lines
+        , (vec (for [[_ bindings] filtered-bindings3
+                     :let [selected (identical? bindings selected-bindings)]]
+                 (row {:bindings bindings
+                       :columns  ks
+                       :width    (if selected nil column-width)
+                       :selected selected})))]
     (-> {:filter-line 4
-         :save-name k
+         :save-key save-key
          :width width
          :filters filters
          :pos new-pos
-         :selected-save (get filtered-bindings3 (if (= 0 skip)
-                                                  pos
-                                                  (rem pos (* skip 3))))
+         :selected-save id
          :ranges (-> (map-indexed (fn [i k] {:arg k
                                              :start (+ before (* i column-width))
                                              :end (+ before (* (inc i) column-width))})
@@ -157,10 +163,45 @@
                                                                  (mod pos le-hurp))))
   )
 
-(def state (atom {:filters {}
-                  :pos 0}))
+(defonce state (atom {:filters {}
+                      :pos 0
+                      :save-key :map-all
+                      :width 80}))
 
-(hiccup :map-all 80 @state)
+(hiccup @state)
+
+(comment
+  (reset! miracle.clj.save/saves {})
+  
+  )
+
+(comment
+  (eval-in-selected-context (conj l 1))
+  
+  (conj l 1)
+  
+  (-> @miracle.clj.save/saves
+      (get :map-all) 
+      last
+      first)
+  
+  )
+
+(defmacro eval-in-selected-context
+  [& body]
+  `(miracle.clj.save/eval-in-context (do ~@body) ~:map-all ~(:selected-save @state)))
+
+(comment
+  (keys (:selected-save @state))
+  
+  (macroexpand '(miracle.clj.save/eval-in-context (conj l 10) :map-all 3))
+  
+  (macroexpand '(miracle.clj.save/eval-in-context form :map-all (:selected-save @state)))
+  
+  (macroexpand '(eval-in-selected-context (conj l 10)))
+  
+  (eval-in-selected-context (conj l 10) (conj l 20))
+  )
 
 (defn handle-input
   [in println]
@@ -169,30 +210,28 @@
     (cond
       (= in 'a) (do (save :print)
                     (binding [*out* *out*]
-                      (prn (:lines (hiccup :map-all 80 @state))))
+                      (prn (:lines (hiccup @state))))
                     (println "got command" in))
       
       (vector? in) (let [{:keys [value] :as command} (apply hash-map in)
                          new-state (swap! state assoc-in [:filters (:assoc command)] value)]
-                     (println "printing" new-state)
-                     #_(println (:lines (hiccup :map-all 80 new-state)))
-                     (prn (:lines (hiccup :map-all 80 new-state)))
+                     #_(println "printing" new-state)
+                     (prn (:lines (hiccup new-state)))
                      (println "done")
                      #_(println (:lines (hiccup :map-all 80 new-state))))
       
       (coll? in) (let [f (eval in)
-                       new-state (swap! state #(hiccup :map-all 80 (f %)))]
+                       new-state (swap! state #(hiccup (f %)))]
+                   ;;(std-println "got msg" in (pr-str (:lines new-state)))
                    (prn (:lines new-state)))
       
-      :else
-      (do (save :unreq)
-          #_(prn "unreq" e)
-          (println "unreeee" in)))
+      :else (do (save :unreq)
+                #_(prn "unreq" e)
+                (println "unreeee" in)))
     (catch Exception e
       (save :err)
       (println "Got error: " e)
-      (prn {:error (with-out-str (pprint (Throwable->map e)))})))
-  (flush))
+      (prn {:error (with-out-str (pprint (Throwable->map e)))}))))
 
 (defn print-all
   [ins outs]
@@ -201,8 +240,23 @@
       (let [r (new LineNumberingPushbackReader (new InputStreamReader ins))
             eof (Object.)]
         (loop [e (read r false eof)]
-          (handle-input e #(binding [*out* stdout] (apply println %&)))
-          (recur (read r false eof)))))))
+          (when-not (= e eof)
+            (handle-input e #(binding [*out* stdout] (apply println %&)))
+            (flush)
+            (recur (read r false eof))))))))
+
+(comment
+  )
+
+(def octal-char
+  (str "o"
+       "("
+       , "([0-3][0-7][0-7])"
+       , "|"
+       , "([0-7][0-7])"
+       , "|"
+       , "([0-7])"
+       ")"))
 
 (defonce servers (atom {}))
 
@@ -219,13 +273,15 @@
 
 (defn -main
   []
-  (doseq [i (range 100)
+  (doseq [i (range 3)
           :let [f (rand-nth [inc dec])
-                v (vec (repeat 1000000 (rand-int 300000)))]]
+                v (vec (repeat 3 (rand-int 10)))]]
     (miracle.playground/map-all f v))
   
   (start-ui-server!)
   
+  (println "UI server running on" 4433)
+
   (def client (new Socket "localhost" 4433))
   
   (def rdr (new LineNumberingPushbackReader (new InputStreamReader (. client (getInputStream)))))
@@ -268,7 +324,7 @@
                          (recur (read rdr))))))
   
   (comment
-    
+    (save :map-all)
     
     (loop [r (.readLine rdr)]
       (binding [*out* stdout]

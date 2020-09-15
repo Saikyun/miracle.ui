@@ -1,1 +1,2 @@
-{:deps {miracle.save {:local/root "/Users/test/programmering/clojure/miracle.save"}}}
+{:deps {;;miracle.save {:local/root "/Users/test/programmering/clojure/miracle.save"}
+        }}

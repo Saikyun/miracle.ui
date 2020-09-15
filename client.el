@@ -51,26 +51,27 @@
 
 (defun miracle-net-filter (process in)
   "Called when a new message is recieved."
-  (with-current-buffer (get-buffer-create (concat client-process-name "-data-buffer"))
-    (goto-char (point-max))
-    (insert in)
-    (when (> (point) (+ 1 (point-min))) ;; sometimes there are left over new lines
-      (goto-char (point-min))
-      (condition-case e ;; if forward-sexp or `edn-read` fails, we just wait for more data
-          (progn
-            (forward-sexp)
-            (let ((res (edn-read (buffer-substring (point-min) (point)))))
-              (delete-region (point-min) (point)) ;; remove the parsed edn
-              ;;(message (format "huh %s" res))
-              (render-widget-view res)
-              (miracle-net-filter process "")))
-        (error
-         ;;(message "err" in)
-         
-         ;; ignore it for now
-         ;; one can add a timer here which clears the buffer
-         ;; if no activity has happened for x seconds
-         )))))
+  (let ((result
+         (with-current-buffer (get-buffer-create (concat client-process-name "-data-buffer"))
+           (goto-char (point-max))
+           (insert in)
+           (when (> (point) (+ 1 (point-min))) ;; sometimes there are left over new lines
+             (goto-char (point-min))
+             (condition-case e ;; if forward-sexp or `edn-read` fails, we just wait for more data
+                 (progn
+                   (forward-sexp)
+                   (let ((res (edn-read (buffer-substring (point-min) (point)))))
+                     (delete-region (point-min) (point)) ;; remove the parsed edn
+                     (miracle-net-filter process "")
+                     res))
+               (error
+                (message "err" in)
+                ;; ignore it for now
+                ;; one can add a timer here which clears the buffer
+                ;; if no activity has happened for x seconds
+                ))))))
+    ;; (message (format "huh %s" result))
+    (when result (render-widget-view result))))
 
 ;; (with-current-buffer (get-buffer-create (concat client-process-name "-data-buffer"))
 ;;   (erase-buffer))
@@ -120,9 +121,31 @@
 (defun que ()
   (interactive)
   (setq curr-point 'nil)
-  (client-send-string "a")
-  )
+  (if-let ((save-key (acrepl-find-miracle-save)))
+      (client-send-string
+       (format "(fn [state] (assoc state :save-key %s, :width %d, :pos 0))"
+               save-key
+               (window-width)))
+    
+    (client-send-string
+     (format "(fn [state] (assoc state :save-key %s, :width %d, :pos 0))"
+             ":map-all"
+             (window-width)))))
 
-(global-set-key (kbd "C-ö") 'que)
+(defun que2 ()
+  (interactive)
+  (setq curr-point 'nil)
+  (client-send-string
+   (format "(fn [state] (assoc state :save-key %s, :width %d, :pos 0))"
+           ":map-all"
+           (window-width))))
+
+(global-set-key (kbd "C-c C-o C-o") 'que)
+
+(global-set-key (kbd "C-ö") 'que2)
+
+;;   (client-send-string "a")
 
 ;;(client-close)
+
+;; (client-process)

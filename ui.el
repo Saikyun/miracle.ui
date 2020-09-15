@@ -207,7 +207,12 @@
 
 (defun render-widget-view
     (hiccup)
-  (switch-to-buffer "*Widget Example*")
+  
+  (if (not (get-buffer "*Miracle UI*"))
+      (switch-to-buffer-other-window "*Miracle UI*")
+    (switch-to-buffer "*Miracle UI*"))
+  
+  ;;(switch-to-buffer "*Miracle UI123*")
   
   (setq first-time (eql 'nil curr-point))
   (setq curr-point (point))
@@ -223,6 +228,9 @@
   
   (define-key widget-field-keymap (kbd "<down>") 'down)
   (define-key widget-field-keymap (kbd "<up>") 'up)
+  
+  (define-key widget-field-keymap (kbd "<tab>") 'widget-forward)
+  (define-key widget-field-keymap (kbd "S-<tab>") 'widget-backward)
   
   (local-set-key (kbd "<tab>") 'widget-forward)
   (local-set-key (kbd "S-<tab>") 'widget-backward)
