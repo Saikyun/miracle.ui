@@ -1,2 +1,5 @@
 {:deps {;;miracle.save {:local/root "/Users/test/programmering/clojure/miracle.save"}
+        carocad/parcera {:mvn/version "0.11.3"}
+        org.antlr/antlr4-runtime {:mvn/version "4.7.1"}
+        potemkin/potemkin {:mvn/version "0.4.5"}
         }}
