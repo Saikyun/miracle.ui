@@ -65,7 +65,7 @@
                      (miracle-net-filter process "")
                      res))
                (error
-                (message "err" in)
+                ;;(message "err" in)
                 ;; ignore it for now
                 ;; one can add a timer here which clears the buffer
                 ;; if no activity has happened for x seconds
@@ -111,12 +111,13 @@
 (defun client-send-string (str)
   (process-send-string (client-process) (concat str "\r\n")))
 
-(condition-case e
-    (client-close)
-  (error (message "%s" e)))
-
-(client-open "localhost" 4433)
-;;(client-send-string "(+ 1 1)")
+(defun miracle-connect-ui
+    ()
+  (interactive)
+  (condition-case e
+      (client-close)
+    (error (message "%s" e)))
+  (client-open "localhost" 4433))
 
 (defun que ()
   (interactive)
@@ -143,9 +144,3 @@
 (global-set-key (kbd "C-c C-o C-o") 'que)
 
 (global-set-key (kbd "C-ö") 'que2)
-
-;;   (client-send-string "a")
-
-;;(client-close)
-
-;; (client-process)

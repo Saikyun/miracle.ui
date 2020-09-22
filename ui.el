@@ -45,14 +45,6 @@
 
 
 
-
-
-
-
-
-
-
-
 (setq hiccup "[:div [:p :map-all]
                  [:div {:display :grid} [:div l] [:div f]]
                  [:div {:display :grid} [:input \"<no filter>\"] [:input \"<no filter>\"]]
@@ -106,6 +98,13 @@
     (1 'nil)
     (t (if (hash-table-p (aref hc 1)) (aref hc 1) 'nil))))
 
+(defun prop
+    (hc which)
+  "Lul `F` `HCS`."
+  (if-let ((ps (props hc)))
+      (gethash which ps)
+    'nil))
+
 (defun children
     (hc)
   "Lul `F` `HCS`."
@@ -118,17 +117,37 @@
 (defun delimiter
     (nof column-width)
   (dotimes (number nof)
-    (dotimes (number (- column-width nof))
+    (dotimes (number column-width)
       (widget-insert "-"))
     (if (< number (- nof 1))
-        (widget-insert "-+-"))))
+        (widget-insert "+"))))
 
 (defun render
     (hc &optional opts)
   (if (or (not (seqp hc)) (stringp hc))
       (let* ((s (format "%s" hc))
-             (s (replace-regexp-in-string "\n " "\n  " s)))
-        (widget-insert s))
+             ;;(s (replace-regexp-in-string "\n " "\n" s))
+             (ss (split-string s "\n")))
+        (when-let ((row (and opts (gethash :start-row opts))))
+          (goto-char row)
+          (end-of-line))
+        (seq-doseq (row ss)
+          (end-of-line)
+          (when-let ((col (and opts (gethash :start-col opts))))
+            (space-fill col))
+          (widget-insert (if (and (and opts (gethash :width opts))
+                                  (> (length row) (gethash :width opts)))
+                             (format " %s~" (substring row 0 (- (gethash :width opts) 2)))
+                           (format " %s " row)))
+          (when-let ((col (and opts (gethash :end-col opts))))
+            (space-fill col)
+            )
+          (when (not (eql (first (last ss)) row))
+            (if (= (point-max) (line-end-position))
+                (widget-insert "\n")
+              (forward-line))))
+        ;;(widget-create 'text :size (or (and opts (gethash :width opts)) 'nil) s)
+        )
     (case (aref hc 0)
       (:hr (widget-insert "\n-----------\n"))
       (:input
@@ -155,13 +174,12 @@
                       ;;(put-text-property start end 'font-lock-face '(:background "gray"))
                       )
                     res)
-                (progn (widget-insert " ") hc))))
+                (progn (widget-insert "") hc))))
       (:p (progn
             (mapc (lambda (c) (widget-insert (format "%s" c))) (children hc))
             (widget-insert "\n")
             'nil))
       ('t hc))))
-
 
 (defun space-fill
     (target)
@@ -176,17 +194,27 @@
          (column-width (- (/ (window-width) nof) 1)))
     
     (delimiter nof column-width)
+    (widget-insert "\n")
     
-    (widget-insert "\n")    
-    
-    (dotimes (number nof)
-      (let ((c (aref cs number))
-            (opts (make-hash-table)))
-        (puthash :width (- column-width (- nof 1)) opts)
-        (traverse-hiccup (lambda (in) (render in opts)) c)
-        (space-fill (+ (* (+ 1 number) (- column-width (- nof 1))))))
-      (if (< number (- nof 1))
-          (widget-insert "|")))
+    (let ((start-row (point)))
+      (dotimes (number nof)
+        (let ((c (aref cs number))
+              (opts (make-hash-table)))
+          (puthash :start-row start-row opts)
+          (puthash :width     column-width opts)
+          (puthash :start-col (+ (* number column-width) number) opts)
+          (puthash :end-col   (+ (* (+ 1 number) column-width) number) opts)
+          (puthash :last-col  (if (= number (- nof 1)) 't 'nil) opts)
+          (when (prop c :selected)
+            (puthash :width (* 3 column-width) opts))
+          (traverse-hiccup (lambda (in) (render in opts)) c)
+          ;;(space-fill (+ (* (+ 1 number) column-width) number))
+          )
+        (if (< number (- nof 1))
+            (widget-insert "|")
+          )
+        ))
+    (goto-char (point-max))
     (widget-insert "\n")
     
     ;;(delimiter nof column-width)
@@ -205,8 +233,12 @@
   (interactive)
   (client-send-string "(fn [state] (update state :pos dec))"))
 
+(defvar last-hiccup 'nil)
+
 (defun render-widget-view
     (hiccup)
+  
+  (setq last-hiccup hiccup)
   
   (if (not (get-buffer "*Miracle UI*"))
       (switch-to-buffer-other-window "*Miracle UI*")
@@ -252,3 +284,8 @@
   (if first-time
       (widget-forward 1)
     (goto-char curr-point)))
+
+(defun render-last
+    ()
+  (interactive)
+  (render-widget-view last-hiccup))
